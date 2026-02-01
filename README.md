@@ -1,18 +1,16 @@
-## Project Title
+## Side Quest: Survival Game
 
-GBDA302 Week 3 Example 1: Instructions Screen with Back button
-
----
+## Side Quest W3
 
 ## Authors
 
-Karen Cochrane and David Han
+Sofia Black, sa3black, 21063350, and GenAI
 
 ---
 
 ## Description
 
-This p5.js project demonstrates a simple multi-screen game structure using a state-based approach. The example includes a start screen, an instructions screen with a back button, a basic game screen, and win/lose outcome screens. The focus is on showing how to separate screens into different files, route input based on the current game state, and design simple UI elements such as buttons and keyboard controls.
+This game is a game called Survival. It is a decision based game that reflects the instructions for the side quest. Each decision has a consequences and focuses on the values of health and trust.
 
 ---
 
@@ -28,12 +26,13 @@ This p5.js project demonstrates a simple multi-screen game structure using a sta
 
 ## Assets
 
-N/A
+(No date) Chatgpt. Available at: /chatgpt.com/ (Accessed: 01 February 2026).
 
 ---
 
 ## GenAI
 
-The code was written by Dr. Karen Cochrane but she used GenAI to write the comments.
+The code was written by GenAI
+Sofia put together the prompts and wrote the process and decision document without the use of GenAI
 
 ---
