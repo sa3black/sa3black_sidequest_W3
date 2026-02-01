@@ -1,128 +1,229 @@
-// NOTE: Do NOT add setup() or draw() in this file
-// setup() and draw() live in main.js
-// This file only defines:
-// 1) drawGame() → what the game screen looks like
-// 2) input handlers → what happens when the player clicks or presses keys
-// 3) helper functions specific to this screen
+// ======================================================
+// STRANDED – Interactive Decision Game
+// ======================================================
+// Uses:
+// - mouse clicks for decisions
+// - persistent player stats
+// - branching story states
+//
+// DO NOT add setup() or draw()
+// ======================================================
 
 // ------------------------------
-// Button data
+// Player stats
 // ------------------------------
-// This object stores all the information needed to draw
-// and interact with the button on the game screen.
-// Keeping this in one object makes it easier to move,
-// resize, or restyle the button later.
-const gameBtn = {
-  x: 400, // x position (centre of the button)
-  y: 550, // y position (centre of the button)
-  w: 260, // width
-  h: 90, // height
-  label: "PRESS HERE", // text shown on the button
+let player = {
+  health: 100,
+  trust: 0, // negative = hostile world, positive = allies
 };
 
 // ------------------------------
-// Main draw function for this screen
+// Game state machine
 // ------------------------------
-// drawGame() is called from main.js *only*
-// when currentScreen === "game"
+let gameState = "intro";
+
+// ------------------------------
+// Choice buttons (reused)
+// ------------------------------
+const choices = [
+  { x: 400, y: 420, w: 420, h: 70, label: "", action: null },
+  { x: 400, y: 510, w: 420, h: 70, label: "", action: null },
+];
+
+// ------------------------------
+// Main draw
+// ------------------------------
 function drawGame() {
-  // Set background colour for the game screen
-  background(240, 230, 140);
+  background(235, 225, 200);
 
-  // ---- Title and instructions text ----
-  fill(0); // black text
-  textSize(32);
-  textAlign(CENTER, CENTER);
-  text("Game Screen", width / 2, 160);
+  drawHUD();
+  drawStory();
+  drawChoices();
 
-  textSize(18);
-  text(
-    "Click the button (or press ENTER) for a random result.",
-    width / 2,
-    210,
-  );
-
-  // ---- Draw the button ----
-  // We pass the button object to a helper function
-  drawGameButton(gameBtn);
-
-  // ---- Cursor feedback ----
-  // If the mouse is over the button, show a hand cursor
-  // Otherwise, show the normal arrow cursor
-  cursor(isHover(gameBtn) ? HAND : ARROW);
+  cursor(choices.some((btn) => isHover(btn)) ? HAND : ARROW);
 }
 
 // ------------------------------
-// Button drawing helper
+// HUD (stats)
 // ------------------------------
-// This function is responsible *only* for drawing the button.
-// It does NOT handle clicks or game logic.
-function drawGameButton({ x, y, w, h, label }) {
-  rectMode(CENTER);
-
-  // Check if the mouse is hovering over the button
-  // isHover() is defined in main.js so it can be shared
-  const hover = isHover({ x, y, w, h });
-
-  noStroke();
-
-  // Change button colour when hovered
-  // This gives visual feedback to the player
-  fill(
-    hover
-      ? color(180, 220, 255, 220) // lighter blue on hover
-      : color(200, 220, 255, 190), // normal state
-  );
-
-  // Draw the button rectangle
-  rect(x, y, w, h, 14); // last value = rounded corners
-
-  // Draw the button text
+function drawHUD() {
   fill(0);
-  textSize(28);
+  textSize(16);
+  textAlign(LEFT, CENTER);
+
+  text(`Health: ${player.health}`, 30, 40);
+  text(`Trust: ${player.trust}`, 30, 65);
+}
+
+// ------------------------------
+// Story text
+// ------------------------------
+function drawStory() {
+  fill(0);
   textAlign(CENTER, CENTER);
-  text(label, x, y);
-}
+  textSize(28);
 
-// ------------------------------
-// Mouse input for this screen
-// ------------------------------
-// This function is called from main.js
-// only when currentScreen === "game"
-function gameMousePressed() {
-  // Only trigger the outcome if the button is clicked
-  if (isHover(gameBtn)) {
-    triggerRandomOutcome();
+  let story = "";
+
+  switch (gameState) {
+    case "intro":
+      story =
+        "You wake up on a deserted island.\nYour ship is gone.\nYou are alone.";
+      setChoices(
+        "Start walking inland",
+        () => (gameState = "beach"),
+        "Stay near the shore",
+        () => {
+          player.health -= 10;
+          gameState = "beach";
+        },
+      );
+      break;
+
+    case "beach":
+      story = "You walk across the island.\nYou notice smoke in the distance.";
+      setChoices(
+        "Investigate the smoke",
+        () => (gameState = "natives"),
+        "Avoid it and hunt for food",
+        () => {
+          player.health += 10;
+          gameState = "natives";
+        },
+      );
+      break;
+
+    case "natives":
+      story = "You encounter a group of island natives.\nThey notice you.";
+      setChoices(
+        "Approach peacefully",
+        () => {
+          player.trust += 15;
+          gameState = "interaction";
+        },
+        "Sneak away",
+        () => {
+          player.trust -= 10;
+          gameState = "interaction";
+        },
+      );
+      break;
+
+    case "interaction":
+      if (player.trust >= 10) {
+        story = "The natives seem calm.\nThey wait for your next move.";
+        setChoices(
+          "Communicate and trade",
+          () => {
+            player.health += 15;
+            gameState = "ending";
+          },
+          "Steal supplies",
+          () => {
+            player.trust -= 30;
+            player.health -= 20;
+            gameState = "ending";
+          },
+        );
+      } else {
+        story = "The natives are tense.\nWeapons are visible.";
+        setChoices(
+          "Run",
+          () => {
+            player.health -= 30;
+            gameState = "ending";
+          },
+          "Attack first",
+          () => {
+            player.health -= 50;
+            player.trust -= 40;
+            gameState = "ending";
+          },
+        );
+      }
+      break;
+
+    case "ending":
+      drawEnding();
+      return;
   }
+
+  text(story, width / 2, 220);
 }
 
 // ------------------------------
-// Keyboard input for this screen
+// Endings
 // ------------------------------
-// Allows keyboard-only interaction (accessibility + design)
-function gameKeyPressed() {
-  // ENTER key triggers the same behaviour as clicking the button
-  if (keyCode === ENTER) {
-    triggerRandomOutcome();
-  }
-}
+function drawEnding() {
+  let endingText = "";
 
-// ------------------------------
-// Game logic: win or lose
-// ------------------------------
-// This function decides what happens next in the game.
-// It does NOT draw anything.
-function triggerRandomOutcome() {
-  // random() returns a value between 0 and 1
-  // Here we use a 50/50 chance:
-  // - less than 0.5 → win
-  // - 0.5 or greater → lose
-  //
-  // You can bias this later, for example:
-  // random() < 0.7 → 70% chance to win
-  if (random() < 0.5) {
-    currentScreen = "win";
+  if (player.health <= 0) {
+    endingText = "You collapse from your wounds.\nYou did not survive.";
+  } else if (player.trust >= 20) {
+    endingText =
+      "The natives help you.\nThey guide you to a rescue route.\nYou escape the island.";
+  } else if (player.trust <= -20) {
+    endingText =
+      "You are forced into hiding.\nNo one trusts you.\nYou remain stranded.";
   } else {
-    currentScreen = "lose";
+    endingText = "You survive, but barely.\nThe island remains your prison.";
   }
+
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(30);
+  text(endingText, width / 2, height / 2);
+
+  setChoices("Restart", resetGame, "", null);
+}
+
+// ------------------------------
+// Choices
+// ------------------------------
+function drawChoices() {
+  choices.forEach((btn) => {
+    if (!btn.label) return;
+
+    rectMode(CENTER);
+    noStroke();
+    fill(isHover(btn) ? 180 : 210);
+    rect(btn.x, btn.y, btn.w, btn.h, 14);
+
+    fill(0);
+    textSize(20);
+    textAlign(CENTER, CENTER);
+    text(btn.label, btn.x, btn.y);
+  });
+}
+
+// ------------------------------
+// Helpers
+// ------------------------------
+function setChoices(label1, action1, label2, action2) {
+  choices[0].label = label1;
+  choices[0].action = action1;
+
+  choices[1].label = label2;
+  choices[1].action = action2;
+}
+
+function resetGame() {
+  player.health = 100;
+  player.trust = 0;
+  gameState = "intro";
+}
+
+// ------------------------------
+// Input
+// ------------------------------
+function gameMousePressed() {
+  choices.forEach((btn) => {
+    if (btn.label && isHover(btn) && btn.action) {
+      btn.action();
+    }
+  });
+}
+
+function gameKeyPressed() {
+  // optional later
 }
