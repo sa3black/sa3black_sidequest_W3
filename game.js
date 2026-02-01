@@ -1,5 +1,5 @@
 // ======================================================
-// STRANDED — Survival Has Consequences
+// STRANDED — Survival Means Consequences
 // ======================================================
 
 // ------------------------------
@@ -11,12 +11,13 @@ let player = {
 };
 
 // ------------------------------
-// Persistent conditions
+// Persistent consequences
 // ------------------------------
 let flags = {
   injured: false,
-  untreatedInjuryTurns: 0,
-  betrayedNatives: false,
+  injuryIgnoredTurns: 0,
+  ranWhileInjured: 0,
+  stoleFromNatives: false,
   allied: false,
 };
 
@@ -56,7 +57,7 @@ function drawSceneBox() {
   let label = "🌿 Wilderness";
   if (gameState === "instructions") label = "🏝️ STRANDED";
   if (gameState === "natives") label = "🛖 Native Camp";
-  if (gameState === "attack") label = "⚔️ Attack";
+  if (gameState === "attack") label = "⚔️ Ambush";
   if (gameState === "ending") label = "🏁 Outcome";
 
   text(label, width / 2, 150);
@@ -81,8 +82,15 @@ function drawStory() {
 
   let story = "";
 
-  // Death by untreated injury
-  if (flags.injured && flags.untreatedInjuryTurns >= 3) {
+  // ------------------------------
+  // GLOBAL DELAYED DEATH CHECKS
+  // ------------------------------
+  if (flags.injuryIgnoredTurns >= 3) {
+    player.health = 0;
+    gameState = "ending";
+  }
+
+  if (flags.ranWhileInjured >= 2) {
     player.health = 0;
     gameState = "ending";
   }
@@ -90,22 +98,25 @@ function drawStory() {
   switch (gameState) {
     case "instructions":
       story =
-        "STRANDED\n\nYour choices determine your survival.\nHealth and trust matter.\nChoose wisely.";
+        "STRANDED\n\nEvery decision matters.\nPoor choices will kill you.";
       setChoices("Continue", () => (gameState = "intro"), "", null);
       break;
 
     case "intro":
-      story = "You wake on a deserted island.\nYour leg is badly injured.";
+      story = "You wake on a deserted island.\nYour leg is injured.";
       setChoices(
-        "Push inland anyway",
+        "Force yourself inland",
         () => {
           flags.injured = true;
+          flags.injuryIgnoredTurns++;
           player.health -= 2;
-          flags.untreatedInjuryTurns++;
           clampStats();
-          queueFeedback("Forcing movement worsens your injury.", "jungle");
+          queueFeedback(
+            "You push through pain. Your injury worsens.",
+            "jungle",
+          );
         },
-        "Rest and assess",
+        "Stay still and assess",
         () => {
           flags.injured = true;
           queueFeedback("You realize your injury must be treated.", "shore");
@@ -114,28 +125,31 @@ function drawStory() {
       break;
 
     case "shore":
-      story = "You search the shore and find wreckage.";
+      story = "Wreckage lies along the shore.";
       setChoices(
         "Bandage your leg",
         () => {
           flags.injured = false;
-          flags.untreatedInjuryTurns = 0;
-          queueFeedback("You treat your injury. Movement is safer.", "jungle");
+          flags.injuryIgnoredTurns = 0;
+          queueFeedback(
+            "You treat your injury. You may survive longer.",
+            "jungle",
+          );
         },
-        "Ignore it",
+        "Ignore injury",
         () => {
+          flags.injuryIgnoredTurns++;
           player.health -= 1;
-          flags.untreatedInjuryTurns++;
           clampStats();
-          queueFeedback("Ignoring your injury weakens you.", "jungle");
+          queueFeedback("Ignoring the injury drains your strength.", "jungle");
         },
       );
       break;
 
     case "jungle":
-      story = "Deep in the jungle, you encounter natives.";
+      story = "You hear voices ahead.";
       setChoices(
-        "Approach calmly",
+        "Approach carefully",
         () => (gameState = "natives"),
         "Run",
         () => (gameState = "run"),
@@ -143,60 +157,65 @@ function drawStory() {
       break;
 
     case "run":
+      if (flags.injured) flags.ranWhileInjured++;
       player.health -= flags.injured ? 3 : 1;
-      flags.untreatedInjuryTurns++;
       clampStats();
       queueFeedback(
-        "You flee blindly, exhausting yourself.",
+        "Running blindly exhausts you.",
         player.health <= 0 ? "ending" : "camp",
       );
       break;
 
     case "natives":
-      story = "The natives surround you cautiously.";
+      story = "The natives surround you.";
       setChoices(
         "Greet peacefully",
         () => {
           player.trust += 2;
           clampStats();
-          queueFeedback("Your calm approach earns trust.", "dialogue");
+          queueFeedback("Your calm behavior earns slight trust.", "dialogue");
         },
         "Steal supplies",
         () => {
-          flags.betrayedNatives = true;
+          flags.stoleFromNatives = true;
           player.trust -= 4;
           clampStats();
-          queueFeedback("You steal from them. They notice.", "attack");
+          queueFeedback(
+            "You steal from them. This will not be forgiven.",
+            "attack",
+          );
         },
       );
       break;
 
     case "dialogue":
-      if (player.trust <= -4) {
-        gameState = "attack";
+      if (player.trust <= -5) {
+        player.health = 0;
+        gameState = "ending";
         break;
       }
 
-      story = "The natives consider your presence.";
+      story = "The natives judge your intentions.";
       setChoices(
-        "Accept help",
+        "Accept their help",
         () => {
           flags.allied = true;
           player.trust += 2;
           clampStats();
-          queueFeedback("They decide to help you escape.", "ending");
+          queueFeedback("They agree to help you escape.", "ending");
         },
-        "Demand help",
+        "Demand assistance",
         () => {
           player.trust -= 3;
           clampStats();
-          queueFeedback("Your aggression angers them.", "attack");
+          queueFeedback("Your aggression seals your fate.", "attack");
         },
       );
       break;
 
     case "attack":
-      if (player.trust <= -5 || player.health <= 4) {
+      // ATTACK IS FREQUENTLY FATAL
+      if (player.health <= 5 || player.trust <= -3) {
         player.health = 0;
         gameState = "ending";
         break;
@@ -204,25 +223,23 @@ function drawStory() {
 
       player.health -= 4;
       clampStats();
-      queueFeedback("The natives attack you. You barely escape.", "camp");
+      queueFeedback("You are attacked and barely escape.", "camp");
       break;
 
     case "camp":
-      story = "Night falls. Your body is failing.";
+      story = "Night falls. You are weak.";
       setChoices(
         "Rest",
         () => {
           player.health += 1;
-          flags.untreatedInjuryTurns++;
           clampStats();
-          queueFeedback("You rest, but danger remains.", "ending");
+          queueFeedback("You survive the night.", "ending");
         },
         "Keep moving",
         () => {
           player.health -= 2;
-          flags.untreatedInjuryTurns++;
           clampStats();
-          queueFeedback("You push yourself too far.", "ending");
+          queueFeedback("You collapse from exhaustion.", "ending");
         },
       );
       break;
@@ -251,7 +268,10 @@ function drawStory() {
 // ======================================================
 function drawEnding() {
   const dead =
-    player.health <= 0 || player.trust <= -6 || flags.untreatedInjuryTurns >= 4;
+    player.health <= 0 ||
+    player.trust <= -5 ||
+    flags.injuryIgnoredTurns >= 3 ||
+    flags.ranWhileInjured >= 2;
 
   textAlign(CENTER, CENTER);
   textSize(30);
@@ -260,7 +280,7 @@ function drawEnding() {
   if (dead) {
     fill(160, 0, 0);
     text(
-      "Your injuries and choices catch up to you.\nYou die on the island.",
+      "Your decisions lead to your death.\nThe island claims you.",
       width / 2,
       height / 2 - 60,
     );
@@ -274,7 +294,7 @@ function drawEnding() {
   } else {
     fill(0);
     text(
-      "You survive for now.\nThe island is not finished with you.",
+      "You survive… for now.\nBut the danger remains.",
       width / 2,
       height / 2 - 60,
     );
@@ -322,8 +342,9 @@ function resetGame() {
   player.trust = 0;
   flags = {
     injured: false,
-    untreatedInjuryTurns: 0,
-    betrayedNatives: false,
+    injuryIgnoredTurns: 0,
+    ranWhileInjured: 0,
+    stoleFromNatives: false,
     allied: false,
   };
   pendingFeedback = null;
