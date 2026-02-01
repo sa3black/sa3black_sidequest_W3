@@ -1,146 +1,243 @@
 // ======================================================
-// STRANDED – Interactive Decision Game
-// ======================================================
-// Uses:
-// - mouse clicks for decisions
-// - persistent player stats
-// - branching story states
-//
-// DO NOT add setup() or draw()
+// STRANDED — Survival Has Consequences
 // ======================================================
 
 // ------------------------------
-// Player stats
+// Player stats (0–10)
 // ------------------------------
 let player = {
-  health: 100,
-  trust: 0, // negative = hostile world, positive = allies
+  health: 10,
+  trust: 0,
 };
 
 // ------------------------------
-// Game state machine
+// Persistent conditions
 // ------------------------------
-let gameState = "intro";
+let flags = {
+  injured: false,
+  untreatedInjuryTurns: 0,
+  betrayedNatives: false,
+  allied: false,
+};
 
 // ------------------------------
-// Choice buttons (reused)
+let gameState = "instructions";
+let pendingFeedback = null;
+
 // ------------------------------
 const choices = [
-  { x: 400, y: 420, w: 420, h: 70, label: "", action: null },
-  { x: 400, y: 510, w: 420, h: 70, label: "", action: null },
+  { x: 400, y: 460, w: 460, h: 65, label: "", action: null },
+  { x: 400, y: 540, w: 460, h: 65, label: "", action: null },
 ];
 
-// ------------------------------
-// Main draw
-// ------------------------------
+// ======================================================
 function drawGame() {
-  background(235, 225, 200);
+  background(200, 235, 200);
 
+  drawSceneBox();
   drawHUD();
   drawStory();
   drawChoices();
 
-  cursor(choices.some((btn) => isHover(btn)) ? HAND : ARROW);
+  cursor(choices.some((b) => isHover(b)) ? HAND : ARROW);
 }
 
-// ------------------------------
-// HUD (stats)
-// ------------------------------
+// ======================================================
+function drawSceneBox() {
+  rectMode(CENTER);
+  noStroke();
+  fill(170, 210, 170);
+  rect(width / 2, 150, 520, 110, 16);
+
+  fill(40, 80, 40);
+  textAlign(CENTER, CENTER);
+  textSize(24);
+
+  let label = "🌿 Wilderness";
+  if (gameState === "instructions") label = "🏝️ STRANDED";
+  if (gameState === "natives") label = "🛖 Native Camp";
+  if (gameState === "attack") label = "⚔️ Attack";
+  if (gameState === "ending") label = "🏁 Outcome";
+
+  text(label, width / 2, 150);
+}
+
+// ======================================================
 function drawHUD() {
-  fill(0);
-  textSize(16);
-  textAlign(LEFT, CENTER);
+  if (gameState === "instructions") return;
 
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(22);
   text(`Health: ${player.health}`, 30, 40);
-  text(`Trust: ${player.trust}`, 30, 65);
+  text(`Trust: ${player.trust}`, 30, 70);
 }
 
-// ------------------------------
-// Story text
-// ------------------------------
+// ======================================================
 function drawStory() {
   fill(0);
   textAlign(CENTER, CENTER);
-  textSize(28);
+  textSize(26);
 
   let story = "";
 
+  // Death by untreated injury
+  if (flags.injured && flags.untreatedInjuryTurns >= 3) {
+    player.health = 0;
+    gameState = "ending";
+  }
+
   switch (gameState) {
-    case "intro":
+    case "instructions":
       story =
-        "You wake up on a deserted island.\nYour ship is gone.\nYou are alone.";
+        "STRANDED\n\nYour choices determine your survival.\nHealth and trust matter.\nChoose wisely.";
+      setChoices("Continue", () => (gameState = "intro"), "", null);
+      break;
+
+    case "intro":
+      story = "You wake on a deserted island.\nYour leg is badly injured.";
       setChoices(
-        "Start walking inland",
-        () => (gameState = "beach"),
-        "Stay near the shore",
+        "Push inland anyway",
         () => {
-          player.health -= 10;
-          gameState = "beach";
+          flags.injured = true;
+          player.health -= 2;
+          flags.untreatedInjuryTurns++;
+          clampStats();
+          queueFeedback("Forcing movement worsens your injury.", "jungle");
+        },
+        "Rest and assess",
+        () => {
+          flags.injured = true;
+          queueFeedback("You realize your injury must be treated.", "shore");
         },
       );
       break;
 
-    case "beach":
-      story = "You walk across the island.\nYou notice smoke in the distance.";
+    case "shore":
+      story = "You search the shore and find wreckage.";
       setChoices(
-        "Investigate the smoke",
-        () => (gameState = "natives"),
-        "Avoid it and hunt for food",
+        "Bandage your leg",
         () => {
-          player.health += 10;
-          gameState = "natives";
+          flags.injured = false;
+          flags.untreatedInjuryTurns = 0;
+          queueFeedback("You treat your injury. Movement is safer.", "jungle");
         },
+        "Ignore it",
+        () => {
+          player.health -= 1;
+          flags.untreatedInjuryTurns++;
+          clampStats();
+          queueFeedback("Ignoring your injury weakens you.", "jungle");
+        },
+      );
+      break;
+
+    case "jungle":
+      story = "Deep in the jungle, you encounter natives.";
+      setChoices(
+        "Approach calmly",
+        () => (gameState = "natives"),
+        "Run",
+        () => (gameState = "run"),
+      );
+      break;
+
+    case "run":
+      player.health -= flags.injured ? 3 : 1;
+      flags.untreatedInjuryTurns++;
+      clampStats();
+      queueFeedback(
+        "You flee blindly, exhausting yourself.",
+        player.health <= 0 ? "ending" : "camp",
       );
       break;
 
     case "natives":
-      story = "You encounter a group of island natives.\nThey notice you.";
+      story = "The natives surround you cautiously.";
       setChoices(
-        "Approach peacefully",
+        "Greet peacefully",
         () => {
-          player.trust += 15;
-          gameState = "interaction";
+          player.trust += 2;
+          clampStats();
+          queueFeedback("Your calm approach earns trust.", "dialogue");
         },
-        "Sneak away",
+        "Steal supplies",
         () => {
-          player.trust -= 10;
-          gameState = "interaction";
+          flags.betrayedNatives = true;
+          player.trust -= 4;
+          clampStats();
+          queueFeedback("You steal from them. They notice.", "attack");
         },
       );
       break;
 
-    case "interaction":
-      if (player.trust >= 10) {
-        story = "The natives seem calm.\nThey wait for your next move.";
-        setChoices(
-          "Communicate and trade",
-          () => {
-            player.health += 15;
-            gameState = "ending";
-          },
-          "Steal supplies",
-          () => {
-            player.trust -= 30;
-            player.health -= 20;
-            gameState = "ending";
-          },
-        );
-      } else {
-        story = "The natives are tense.\nWeapons are visible.";
-        setChoices(
-          "Run",
-          () => {
-            player.health -= 30;
-            gameState = "ending";
-          },
-          "Attack first",
-          () => {
-            player.health -= 50;
-            player.trust -= 40;
-            gameState = "ending";
-          },
-        );
+    case "dialogue":
+      if (player.trust <= -4) {
+        gameState = "attack";
+        break;
       }
+
+      story = "The natives consider your presence.";
+      setChoices(
+        "Accept help",
+        () => {
+          flags.allied = true;
+          player.trust += 2;
+          clampStats();
+          queueFeedback("They decide to help you escape.", "ending");
+        },
+        "Demand help",
+        () => {
+          player.trust -= 3;
+          clampStats();
+          queueFeedback("Your aggression angers them.", "attack");
+        },
+      );
+      break;
+
+    case "attack":
+      if (player.trust <= -5 || player.health <= 4) {
+        player.health = 0;
+        gameState = "ending";
+        break;
+      }
+
+      player.health -= 4;
+      clampStats();
+      queueFeedback("The natives attack you. You barely escape.", "camp");
+      break;
+
+    case "camp":
+      story = "Night falls. Your body is failing.";
+      setChoices(
+        "Rest",
+        () => {
+          player.health += 1;
+          flags.untreatedInjuryTurns++;
+          clampStats();
+          queueFeedback("You rest, but danger remains.", "ending");
+        },
+        "Keep moving",
+        () => {
+          player.health -= 2;
+          flags.untreatedInjuryTurns++;
+          clampStats();
+          queueFeedback("You push yourself too far.", "ending");
+        },
+      );
+      break;
+
+    case "feedback":
+      story = pendingFeedback.text;
+      setChoices(
+        "Continue",
+        () => {
+          gameState = pendingFeedback.nextState;
+          pendingFeedback = null;
+        },
+        "",
+        null,
+      );
       break;
 
     case "ending":
@@ -148,47 +245,53 @@ function drawStory() {
       return;
   }
 
-  text(story, width / 2, 220);
+  text(story, width / 2, 300);
 }
 
-// ------------------------------
-// Endings
-// ------------------------------
+// ======================================================
 function drawEnding() {
-  let endingText = "";
+  const dead =
+    player.health <= 0 || player.trust <= -6 || flags.untreatedInjuryTurns >= 4;
 
-  if (player.health <= 0) {
-    endingText = "You collapse from your wounds.\nYou did not survive.";
-  } else if (player.trust >= 20) {
-    endingText =
-      "The natives help you.\nThey guide you to a rescue route.\nYou escape the island.";
-  } else if (player.trust <= -20) {
-    endingText =
-      "You are forced into hiding.\nNo one trusts you.\nYou remain stranded.";
-  } else {
-    endingText = "You survive, but barely.\nThe island remains your prison.";
-  }
-
-  fill(0);
   textAlign(CENTER, CENTER);
   textSize(30);
-  text(endingText, width / 2, height / 2);
+  textStyle(BOLD);
+
+  if (dead) {
+    fill(160, 0, 0);
+    text(
+      "Your injuries and choices catch up to you.\nYou die on the island.",
+      width / 2,
+      height / 2 - 60,
+    );
+  } else if (flags.allied) {
+    fill(20, 100, 40);
+    text(
+      "With the natives’ help,\nyou escape the island.",
+      width / 2,
+      height / 2 - 60,
+    );
+  } else {
+    fill(0);
+    text(
+      "You survive for now.\nThe island is not finished with you.",
+      width / 2,
+      height / 2 - 60,
+    );
+  }
 
   setChoices("Restart", resetGame, "", null);
+  choices[0].y = height - 90;
 }
 
-// ------------------------------
-// Choices
-// ------------------------------
+// ======================================================
 function drawChoices() {
   choices.forEach((btn) => {
     if (!btn.label) return;
-
     rectMode(CENTER);
     noStroke();
-    fill(isHover(btn) ? 180 : 210);
+    fill(isHover(btn) ? 160 : 210);
     rect(btn.x, btn.y, btn.w, btn.h, 14);
-
     fill(0);
     textSize(20);
     textAlign(CENTER, CENTER);
@@ -196,34 +299,42 @@ function drawChoices() {
   });
 }
 
-// ------------------------------
-// Helpers
-// ------------------------------
-function setChoices(label1, action1, label2, action2) {
-  choices[0].label = label1;
-  choices[0].action = action1;
+// ======================================================
+function queueFeedback(text, nextState) {
+  pendingFeedback = { text, nextState };
+  gameState = "feedback";
+}
 
-  choices[1].label = label2;
-  choices[1].action = action2;
+function setChoices(l1, a1, l2, a2) {
+  choices[0].label = l1;
+  choices[0].action = a1;
+  choices[1].label = l2;
+  choices[1].action = a2;
+}
+
+function clampStats() {
+  player.health = constrain(player.health, 0, 10);
+  player.trust = constrain(player.trust, -10, 10);
 }
 
 function resetGame() {
-  player.health = 100;
+  player.health = 10;
   player.trust = 0;
-  gameState = "intro";
+  flags = {
+    injured: false,
+    untreatedInjuryTurns: 0,
+    betrayedNatives: false,
+    allied: false,
+  };
+  pendingFeedback = null;
+  gameState = "instructions";
 }
 
-// ------------------------------
-// Input
-// ------------------------------
+// ======================================================
 function gameMousePressed() {
   choices.forEach((btn) => {
-    if (btn.label && isHover(btn) && btn.action) {
-      btn.action();
-    }
+    if (btn.label && btn.action && isHover(btn)) btn.action();
   });
 }
 
-function gameKeyPressed() {
-  // optional later
-}
+function gameKeyPressed() {}

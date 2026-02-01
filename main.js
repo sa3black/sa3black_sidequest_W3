@@ -43,7 +43,6 @@ function setup() {
 function draw() {
   // Each screen file defines its own draw function:
   //   start.js         → drawStart()
-  //   instructions.js  → drawInstr()
   //   game.js          → drawGame()
   //   win.js           → drawWin()
   //   lose.js          → drawLose()
@@ -68,7 +67,6 @@ function draw() {
 function mousePressed() {
   // Each screen *may* define a mouse handler:
   // start.js         → startMousePressed()
-  // instructions.js  → instrMousePressed()
   // game.js          → gameMousePressed()
   // win.js           → winMousePressed()
   // lose.js          → loseMousePressed()
@@ -89,7 +87,6 @@ function mousePressed() {
 function keyPressed() {
   // Each screen *may* define a key handler:
   // start.js         → startKeyPressed()
-  // instructions.js  → instrKeyPressed()
   // game.js          → gameKeyPressed()
   // win.js           → winKeyPressed()
   // lose.js          → loseKeyPressed()
